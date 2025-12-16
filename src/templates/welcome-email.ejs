@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to Sweety</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #fff6f8;
+    }
+    .email-container {
+      background-color: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 6px 20px rgba(255, 105, 180, 0.15);
+    }
+    .header {
+      background: linear-gradient(135deg, #ff9ec4 0%, #ff69b4 100%);
+      color: white;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+    .welcome-icon {
+      font-size: 48px;
+      margin: 15px 0;
+    }
+    .welcome-message {
+      font-size: 24px;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+    .tagline {
+      font-size: 16px;
+      opacity: 0.9;
+      margin: 0;
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .greeting {
+      font-size: 18px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+    .main-text {
+      font-size: 16px;
+      margin-bottom: 25px;
+      line-height: 1.7;
+    }
+    .account-info {
+      background: linear-gradient(135deg, #fff6f8 0%, #ffe4ec 100%);
+      padding: 25px;
+      border-radius: 8px;
+      margin: 30px 0;
+      border-left: 4px solid #ff69b4;
+      position: relative;
+    }
+    .account-info::before {
+      content: "♡";
+      position: absolute;
+      top: -10px;
+      right: 20px;
+      background: #ff69b4;
+      color: white;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+    }
+    .account-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 15px;
+    }
+    .account-details {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .account-detail {
+      display: flex;
+      align-items: center;
+      font-size: 15px;
+      color: #555;
+    }
+    .account-detail strong {
+      min-width: 60px;
+      color: #333;
+    }
+    .next-steps {
+      margin: 30px 0;
+    }
+    .steps-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+    }
+    .step-item {
+      background-color: #fff6f8;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 3px solid #ff69b4;
+      transition: transform 0.2s ease;
+    }
+    .step-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 105, 180, 0.15);
+    }
+    .step-icon {
+      font-size: 24px;
+      margin-bottom: 10px;
+      color: #ff69b4;
+    }
+    .step-text {
+      font-size: 15px;
+      color: #555;
+      margin: 0;
+    }
+    .cta-section {
+      text-align: center;
+      margin: 40px 0;
+      padding: 30px;
+      background: linear-gradient(135deg, #fff6f8 0%, #ffe4ec 100%);
+      border-radius: 8px;
+    }
+    .button {
+      display: inline-block;
+      background: linear-gradient(135deg, #ff9ec4 0%, #ff69b4 100%);
+      color: white;
+      padding: 15px 35px;
+      text-decoration: none;
+      border-radius: 25px;
+      font-weight: bold;
+      font-size: 16px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(255, 105, 180, 0.3);
+    }
+    .button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 105, 180, 0.4);
+    }
+    .support-section {
+      background-color: #fff6f8;
+      padding: 25px;
+      border-radius: 8px;
+      margin: 30px 0;
+      text-align: center;
+    }
+    .support-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .support-text {
+      color: #666;
+      margin-bottom: 15px;
+    }
+    .footer {
+      background-color: #fff6f8;
+      padding: 30px;
+      text-align: center;
+      color: #666;
+    }
+    .team-signature {
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      margin: 20px 0;
+    }
+    .social-links {
+      margin: 20px 0;
+    }
+    .social-links a {
+      display: inline-block;
+      margin: 0 8px;
+      color: #ff69b4;
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+    .social-links a:hover {
+      color: #ff9ec4;
+    }
+    .brand-footer {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #f5dce3;
+      font-size: 12px;
+      color: #999;
+    }
+    @media (max-width: 600px) {
+      .steps-grid {
+        grid-template-columns: 1fr;
+      }
+      .content {
+        padding: 25px 20px;
+      }
+      .account-details {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">SWEETY</div>
+      <div class="welcome-icon">🛍️</div>
+      <div class="welcome-message">Welcome, <%= firstName %>!</div>
+      <p class="tagline">Your sweetest shopping journey starts here 🍬</p>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div class="greeting">
+        Hi <%= firstName %> <%= lastName %>,
+      </div>
+
+      <p class="main-text">
+        Thank you for joining <strong>Sweety</strong> — your new go-to destination for all things cute, trendy, and delightful!  
+        We’re so happy to have you in our shopping family. Let’s make every order a little sweeter.
+      </p>
+
+      <!-- Account Information -->
+      <div class="account-info">
+        <div class="account-title">Your Sweety Account is Ready!</div>
+        <div class="account-details">
+          <div class="account-detail">
+            <strong>Email:</strong> <%= email %>
+          </div>
+          <div class="account-detail">
+            <strong>Phone:</strong> <%= phone %>
+          </div>
+        </div>
+      </div>
+
+      <!-- Next Steps -->
+      <div class="next-steps">
+        <h2 class="steps-title">What’s Next?</h2>
+        <div class="steps-grid">
+          <div class="step-item">
+            <div class="step-icon">🛒</div>
+            <p class="step-text">Start browsing our collections and discover your new favorites</p>
+          </div>
+          <div class="step-item">
+            <div class="step-icon">💖</div>
+            <p class="step-text">Add items to your wishlist and save what you love</p>
+          </div>
+          <div class="step-item">
+            <div class="step-icon">🎁</div>
+            <p class="step-text">Enjoy exclusive deals and sweet member-only offers</p>
+          </div>
+          <div class="step-item">
+            <div class="step-icon">🚚</div>
+            <p class="step-text">Sit back and relax — we’ll deliver the sweetness to your door!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Call to Action -->
+      <div class="cta-section">
+        <h3 style="margin-top: 0; color: #333;">Start Shopping Now</h3>
+        <p style="color: #666; margin-bottom: 25px;">Your next favorite find is just a click away!</p>
+        <a href="#" class="button">Shop Now</a>
+      </div>
+
+      <!-- Support Section -->
+      <div class="support-section">
+        <div class="support-title">Need Help?</div>
+        <p class="support-text">
+          Our friendly support team is always here to help!  
+          Reach out anytime if you have questions or need a hand with your first order.
+        </p>
+      </div>
+
+      <p style="font-size: 16px; margin-bottom: 10px;">Welcome to the Sweety family 💕</p>
+      <div class="team-signature">– The Sweety Team</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div class="social-links">
+        <a href="#">Facebook</a>
+        <a href="#">Instagram</a>
+        <a href="#">TikTok</a>
+        <a href="#">Pinterest</a>
+      </div>
+
+      <div class="brand-footer">
+        <p>&copy; 2025 Sweety. All rights reserved.</p>
+        <p>This email was sent to <%= email %>. If you didn’t create this account, please ignore this message.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
