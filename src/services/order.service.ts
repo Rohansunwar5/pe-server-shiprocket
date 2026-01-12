@@ -1,275 +1,247 @@
 import { OrderRepository } from '../repository/order.repository';
-import productModel from '../models/product.model';
-import cartModel from '../models/cart.model';
+import { CartRepository } from '../repository/cart.repository';
 import { NotFoundError } from '../errors/not-found.error';
 import { BadRequestError } from '../errors/bad-request.error';
-import { IOrderAddress, IOrderItem } from '../models/order.model';
-import { nanoid } from 'nanoid';
+import productVariantModel from '../models/productVariant.model';
+import productModel from '../models/product.model';
+import mongoose from 'mongoose';
+import mailService from './mail.service';
 
 class OrderService {
-  constructor(private readonly _orderRepo: OrderRepository) {}
+  constructor( private readonly _orderRepository: OrderRepository, private readonly _cartRepository: CartRepository ) {}
 
-  private generateOrderNumber(): string {
-    const timestamp = Date.now();
-    const random = nanoid(8).toUpperCase();
-    return `ORD-${timestamp}-${random}`;
-  }
+  async createOrderFromWebhook(webhookData: any) {
+    const {
+      order_id,
+      cart_data,
+      status,
+      phone,
+      email,
+      payment_type,
+      total_amount_payable,
+      shipping_address,
+      discount_amount,
+      coupon_code,
+      voucher_code,
+    } = webhookData;
 
-  private async validateCartItems(cartItems: any[]) {
-    const validatedItems: IOrderItem[] = [];
+    if (status !== 'SUCCESS') {
+      throw new BadRequestError('Order status is not SUCCESS');
+    }
 
-    for (const item of cartItems) {
-      // Fetch product details
-      const product = await productModel.findById(item.product);
-      if (!product) {
-        throw new NotFoundError(`Product ${item.product} not found`);
-      }
+    const existingOrder = await this._orderRepository.getOrderByShiprocketId(
+      order_id
+    );
 
-      if (!product.isActive) {
-        throw new BadRequestError(`Product ${product.name} is no longer available`);
-      }
+    if (existingOrder) {
+      return existingOrder;
+    }
 
-      // Find the specific color
-      const productColor = product.colors.find(
-        (c) => c.colorName === item.color.colorName
-      );
-      if (!productColor) {
-        throw new BadRequestError(
-          `Color ${item.color.colorName} not available for ${product.name}`
-        );
-      }
-
-      // Find the specific size stock
-      const sizeStock = productColor.sizeStock.find((s) => s.size === item.size);
-      if (!sizeStock) {
-        throw new BadRequestError(
-          `Size ${item.size} not available for ${product.name} in ${item.color.colorName}`
-        );
-      }
-
-      // Check stock availability
-      if (sizeStock.stock < item.quantity) {
-        throw new BadRequestError(
-          `Insufficient stock for ${product.name} - ${item.color.colorName} - ${item.size}. Available: ${sizeStock.stock}`
-        );
-      }
-
-      validatedItems.push({
-        productId: product._id,
-        productCode: product.productCode,
-        name: product.name,
-        price: product.price,
-        quantity: item.quantity,
-        size: item.size,
-        color: {
-          colorName: item.color.colorName,
-          colorHex: item.color.colorHex,
-        },
-        selectedImage: item.selectedImage,
-        hsn: product.hsn,
-        gstRate: 0, // Configure GST rate as needed
+    const orderNumber = await this.generateOrderNumber();
+    const orderItems = await Promise.all(
+    cart_data.items.map(async (item: any) => {
+      const variant = await productVariantModel.findOne({
+        shiprocketVariantId: item.variant_id,
       });
-    }
 
-    return validatedItems;
-  }
+      if (!variant) {
+        throw new NotFoundError(
+          `Variant not found for Shiprocket ID: ${item.variant_id}`
+        );
+      }
 
-  private calculateOrderTotals(params: {
-    items: IOrderItem[];
-    appliedCoupon?: { discountAmount: number };
-    appliedVoucher?: { discountAmount: number };
-    shippingAmount?: number;
-  }) {
-    const subtotal = params.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
+      const product = await productModel.findById(variant.productId);
+
+      if (!product) {
+        throw new NotFoundError(
+          `Product not found for variant: ${variant._id}`
+        );
+      }
+
+      return {
+          variantId: variant._id,
+          shiprocketVariantId: variant.shiprocketVariantId,
+          productName: product.name, 
+          sku: variant.sku,
+          attributes: variant.attributes,
+          image: variant.image,
+          quantity: item.quantity,
+          price: variant.price,
+          subtotal: variant.price * item.quantity,
+        };
+      })
     );
 
-    const couponDiscount = params.appliedCoupon?.discountAmount || 0;
-    const voucherDiscount = params.appliedVoucher?.discountAmount || 0;
-    const discountAmount = couponDiscount + voucherDiscount;
+    const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const discount = discount_amount || 0;
+    const total = total_amount_payable;
 
-    const shippingAmount = params.shippingAmount || 0;
-
-    // Calculate GST (if applicable)
-    const gstAmount = params.items.reduce(
-      (sum, item) => sum + (item.price * item.quantity * item.gstRate) / 100,
-      0
-    );
-
-    const totalAmount = subtotal - discountAmount + shippingAmount + gstAmount;
-
-    return {
-      subtotal,
-      discountAmount,
-      shippingAmount,
-      gstAmount,
-      totalAmount: Math.max(totalAmount, 0),
+    const paymentTypeMap: any = {
+      CASH_ON_DELIVERY: 'CASH_ON_DELIVERY',
+      COD: 'CASH_ON_DELIVERY',
+      PREPAID: 'PREPAID',
+      UPI: 'UPI',
+      CARD: 'CARD',
+      WALLET: 'WALLET',
     };
-  }
 
-  async createOrderFromCart(params: {
-    userId?: string;
-    sessionId?: string;
-    shippingAddress: IOrderAddress;
-    billingAddress?: IOrderAddress;
-    customerNotes?: string;
-    source?: string;
-  }) {
-    // Fetch cart
-    const cart = await cartModel.findOne(
-      params.userId
-        ? { user: params.userId, isActive: true }
-        : { sessionId: params.sessionId, isActive: true }
-    );
+    const order = await this._orderRepository.createOrder({
+      shiprocketOrderId: order_id,
+      orderNumber,
+      items: orderItems,
+      shippingAddress: {
+        name: shipping_address?.name || '',
+        phone: phone || '',
+        email: email || '',
+        addressLine1: shipping_address?.address_line1 || '',
+        addressLine2: shipping_address?.address_line2 || '',
+        city: shipping_address?.city || '',
+        state: shipping_address?.state || '',
+        pinCode: shipping_address?.pincode || '',
+        country: shipping_address?.country || 'India',
+      },
+      paymentType: paymentTypeMap[payment_type] || 'CASH_ON_DELIVERY',
+      paymentStatus: payment_type === 'PREPAID' ? 'PAID' : 'PENDING',
+      pricing: {
+        subtotal,
+        discount,
+        shippingCharges: 0,
+        tax: 0,
+        total,
+      },
+      ...(coupon_code && {
+        appliedCoupon: {
+          code: coupon_code,
+          discountAmount: discount,
+        },
+      }),
+      ...(voucher_code && {
+        appliedVoucher: {
+          code: voucher_code,
+          discountAmount: discount,
+        },
+      }),
+    });
 
-    if (!cart || !cart.items.length) {
-      throw new BadRequestError('Cart is empty');
+    await this.updateStock(orderItems);
+
+    // Clear cart if available
+    // Note: You'll need to determine userId/sessionId from webhook data
+    // For now, we'll skip cart clearing as webhook doesn't provide this info
+
+    // Send order confirmation email
+    if (email) {
+      await this.sendOrderConfirmationEmail(order);
     }
-
-    // Validate cart items and get product details
-    const validatedItems = await this.validateCartItems(cart.items);
-
-    // Calculate totals
-    const totals = this.calculateOrderTotals({
-      items: validatedItems,
-      appliedCoupon: cart.appliedCoupon,
-      appliedVoucher: cart.appliedVoucher,
-    });
-
-    // Create order
-    const order = await this._orderRepo.createOrder({
-      orderNumber: this.generateOrderNumber(),
-      userId: params.userId,
-      sessionId: params.sessionId,
-      isGuestOrder: !params.userId,
-      items: validatedItems,
-      subtotal: totals.subtotal,
-      discountAmount: totals.discountAmount,
-      shippingAmount: totals.shippingAmount,
-      gstAmount: totals.gstAmount,
-      totalAmount: totals.totalAmount,
-      appliedCoupon: cart.appliedCoupon ? {
-        code: cart.appliedCoupon.code,
-        discountId: cart.appliedCoupon.discountId.toString(),
-        discountAmount: cart.appliedCoupon.discountAmount,
-      } : undefined,
-      appliedVoucher: cart.appliedVoucher ? {
-        code: cart.appliedVoucher.code,
-        discountId: cart.appliedVoucher.discountId.toString(),
-        discountAmount: cart.appliedVoucher.discountAmount,
-      } : undefined,
-      shippingAddress: params.shippingAddress,
-      billingAddress: params.billingAddress || params.shippingAddress,
-      customerNotes: params.customerNotes,
-      source: params.source || 'web',
-    });
-
-    // Deactivate cart after order creation
-    await cartModel.findByIdAndUpdate(cart._id, { isActive: false });
 
     return order;
   }
 
   async getOrderById(orderId: string) {
-    const order = await this._orderRepo.getOrderById(orderId);
-    if (!order) {
-      throw new NotFoundError('Order not found');
-    }
+    const order = await this._orderRepository.getOrderById(orderId);
+    if (!order) throw new NotFoundError('Order not found')
+
     return order;
   }
 
-  async getOrderByOrderNumber(orderNumber: string) {
-    const order = await this._orderRepo.getOrderByOrderNumber(orderNumber);
-    if (!order) {
-      throw new NotFoundError('Order not found');
-    }
+  async getOrderByShiprocketId(shiprocketOrderId: string) {
+    const order = await this._orderRepository.getOrderByShiprocketId(shiprocketOrderId);
+
+    return order;
+  }
+  
+  async getUserOrders(params: { userId: string; page?: number; limit?: number; orderStatus?: string; paymentStatus?: string }) {
+    const { userId, page, limit, orderStatus, paymentStatus } = params;
+
+    return this._orderRepository.getOrdersWithFilters({
+      userId,
+      orderStatus,
+      paymentStatus,
+      page,
+      limit,
+    });
+  }
+
+  async updateOrderStatus(params: { orderId: string; orderStatus: string }) {
+    const order = await this._orderRepository.updateOrderStatus(params);
+
+    if (!order) throw new NotFoundError('Order not found')
+
     return order;
   }
 
-  async getUserOrders(userId: string, limit?: number) {
-    return this._orderRepo.getOrdersByUserId(userId, limit);
-  }
+  async updatePaymentStatus(params: { orderId: string, paymentStatus: string}) {
+    const order = await this._orderRepository.updatePaymentStatus(params);
+    if (!order) throw new NotFoundError('Order not found')
 
-  async getGuestOrders(sessionId: string, limit?: number) {
-    return this._orderRepo.getOrdersBySessionId(sessionId, limit);
-  }
-
-  async updateOrderStatus(params: {
-    orderId: string;
-    status: string;
-    paymentStatus?: string;
-    shipmentStatus?: string;
-  }) {
-    const order = await this._orderRepo.updateOrderStatus(params);
-    if (!order) {
-      throw new NotFoundError('Order not found');
-    }
     return order;
   }
 
-  async cancelOrder(params: {
-    orderId: string;
-    cancelledBy: string;
-    cancellationReason?: string;
-  }) {
-    const order = await this._orderRepo.getOrderById(params.orderId);
+  async updateTrackingInfo(params: { orderId: string; trackingNumber: string; shiprocketShipmentId?: string }) {
+    const order = await this._orderRepository.updateTrackingInfo(params);
+
     if (!order) {
       throw new NotFoundError('Order not found');
     }
 
-    // Check if order can be cancelled
-    const cancellableStatuses = [
-      'created',
-      'payment_pending',
-      'payment_failed',
-      'confirmed',
-    ];
-    if (!cancellableStatuses.includes(order.status)) {
-      throw new BadRequestError(
-        `Order cannot be cancelled in ${order.status} status`
+    return order;
+  }
+
+  async cancelOrder(params: { orderId: string; cancellationReason: string }) {
+    const order = await this._orderRepository.cancelOrder(params);
+
+    if (!order)  throw new NotFoundError('Order not found');
+    await this.restoreStock(order.items);
+
+    return order;
+  }
+
+  private async generateOrderNumber(): Promise<string> {
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, '0');
+    return `ORD${timestamp}${random}`;
+  }
+
+  private async restoreStock(items: any[]) {
+    //TODO: optimize with bulk operations
+    for(const item of items) {
+      await productVariantModel.findByIdAndUpdate(item.variantId, {
+        $inc: { stock: item.quantity},
+      })
+    }
+  }
+
+  private async updateStock(items: any[]) {
+    for (const item of items) {
+      await productVariantModel.findByIdAndUpdate(item.variantId, {
+        $inc: { stock: -item.quantity },
+      });
+    }
+  }
+
+  private async sendOrderConfirmationEmail(order: any) {
+    try {
+      await mailService.sendEmail(
+        order.shippingAddress.email,
+        'order-confirmation.ejs',
+        {
+          orderNumber: order.orderNumber,
+          customerName: order.shippingAddress.name,
+          items: order.items,
+          subtotal: order.pricing.subtotal,
+          discount: order.pricing.discount,
+          total: order.pricing.total,
+          shippingAddress: order.shippingAddress,
+          paymentType: order.paymentType,
+        },
+        `Order Confirmation - ${order.orderNumber}`
       );
+    } catch (error) {
+      console.error('Failed to send order confirmation email:', error);
     }
-
-    // Update product stock back
-    for (const item of order.items) {
-      const product = await productModel.findById(item.productId);
-      if (product) {
-        const color = product.colors.find(
-          (c) => c.colorName === item.color.colorName
-        );
-        if (color) {
-          const sizeStock = color.sizeStock.find((s) => s.size === item.size);
-          if (sizeStock) {
-            sizeStock.stock += item.quantity;
-            await product.save();
-          }
-        }
-      }
-    }
-
-    return this._orderRepo.cancelOrder(
-      params.orderId,
-      params.cancelledBy,
-      params.cancellationReason
-    );
-  }
-
-  async getOrdersByStatus(status: string, limit?: number, skip?: number) {
-    return this._orderRepo.getOrdersByStatus(status, limit, skip);
-  }
-
-  async getRecentOrders(limit: number = 10) {
-    return this._orderRepo.getRecentOrders(limit);
-  }
-
-  async linkPaymentToOrder(orderId: string, paymentId: string) {
-    return this._orderRepo.updateOrderPaymentId(orderId, paymentId);
-  }
-
-  async linkShipmentToOrder(orderId: string, shipmentId: string) {
-    return this._orderRepo.updateOrderShipmentId(orderId, shipmentId);
   }
 }
 
-export default new OrderService(new OrderRepository());
+export default new OrderService( new OrderRepository(), new CartRepository());

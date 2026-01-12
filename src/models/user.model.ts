@@ -1,94 +1,58 @@
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 
-const PASSWORD_MIN_LENGTH = 8;
-const PHONE_MIN_LENGTH = 9;
+const addressSchema = new mongoose.Schema(
+  {
+    name: String,
+    phone: String,
+    email: String,
 
-export enum IAuthProvider {
-  EMAIL = 'email',
-  GOGGLE = 'google'
-}
+    addressLine1: String,
+    addressLine2: String,
+    city: String,
+    state: String,
+    pincode: String,
+    country: {
+      type: String,
+      default: "India",
+    },
+  },
+  { _id: false }
+);
 
 const userSchema = new mongoose.Schema(
   {
-    firstName: {
-      type: String,
-      required: true,
-      trim: true,
-      maxLength: 40,
-    },
-    lastName: {
-      type: String,
-      trim: true,
-      maxLength: 40,
-    },
-    email: {
-      type: String,
-      required: true,
-      minLength: 2,
-    },
     phone: {
       type: String,
-      trim: true,
+      index: true,
     },
-    img: {
+
+    email: {
       type: String,
+      index: true,
     },
-    addresses: [{
-      name: String,
-      addressLine1: String,
-      addressLine2: String,
-      city: String,
-      state: String,
-      pinCode: String,
-      country: String,
-      isDefault: {
-        type: Boolean,
-        default: false,
-      }
-    }],
-    password: {
-      type: String,
-      minLength: PASSWORD_MIN_LENGTH,
-    },
-    authProvider: {
-      type: String,
-      enum: IAuthProvider,
-      default: IAuthProvider.EMAIL
-    },
-    isGuest: {
-      type: Boolean,
-      default: false,
-    },
-    verified: {
-      type: Boolean,
-      default: false
-    }
-  }, { timestamps: true }
+
+    addresses: [addressSchema],
+
+    lastCheckoutAt: Date,
+  },
+  { timestamps: true }
 );
 
-userSchema.index({ email: 1 });
-
-export interface IUser extends mongoose.Document {
+export interface IUser {
   _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
   phone?: string;
-  authProvider: string;
-  img?: string;
-  verified: boolean;
-  password?: string;
-  addresses?: Array<{
-    name: string;
-    addressLine1: string;
+  email?: string;
+  addresses?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    addressLine1?: string;
     addressLine2?: string;
-    city: string;
-    state: string;
-    pinCode: string;
-    country: string;
-    isDefault: boolean;
-  }>;
-  isGuest?: boolean;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    country?: string;
+  }[];
 }
 
-export default mongoose.model<IUser>('User', userSchema);
+export default mongoose.model<IUser>("User", userSchema);

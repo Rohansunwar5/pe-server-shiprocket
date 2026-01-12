@@ -1,339 +1,244 @@
-import mongoose, { Document } from 'mongoose';
+import mongoose from 'mongoose';
 
-const orderItemSchema = new mongoose.Schema({
-  productId: {
-    type: String,
-    required: true,
-  },
-  productCode: {
-    type: String,
-    required: true,
-  },
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  price: {
-    type: Number,
-    required: true,
-    min: 0,
-  },
-  quantity: {
-    type: Number,
-    required: true,
-    min: 1,
-  },
-  size: {
-    type: String,
-    required: true,
-  },
-  color: {
-    colorName: {
+const orderItemSchema = new mongoose.Schema(
+  {
+    variantId: {
+      type: mongoose.Types.ObjectId,
+      required: true,
+    },
+    shiprocketVariantId: {
+      type: String,
+    },
+
+    productName: {
       type: String,
       required: true,
     },
-    colorHex: {
+
+    sku: {
       type: String,
       required: true,
     },
-  },
-  selectedImage: {
-    type: String,
-    required: true,
-  },
-  hsn: {
-    type: String,
-    trim: true,
-  },
-  gstRate: {
-    type: Number,
-    default: 0,
-  },
-});
 
-const addressSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
-    trim: true,
+    attributes: {
+      size: String,
+      colorName: String,
+      colorHex: String,
+    },
+
+    image: {
+      type: String,
+    },
+
+    quantity: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    price: {
+      type: Number,
+      required: true,
+    },
+
+    subtotal: {
+      type: Number,
+      required: true,
+    },
   },
-  phone: {
-    type: String,
-    required: true,
-    trim: true,
+  { _id: false }
+);
+
+const shippingAddressSchema = new mongoose.Schema(
+  {
+    name: String,
+    phone: String,
+    email: String,
+    addressLine1: String,
+    addressLine2: String,
+    city: String,
+    state: String,
+    pinCode: String,
+    country: String,
   },
-  email: {
-    type: String,
-    trim: true,
-  },
-  addressLine1: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  addressLine2: {
-    type: String,
-    trim: true,
-  },
-  city: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  state: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  pincode: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  country: {
-    type: String,
-    default: 'India',
-    trim: true,
-  },
-});
+  { _id: false }
+);
 
 const orderSchema = new mongoose.Schema(
   {
+    userId: {
+      type: mongoose.Types.ObjectId,
+    },
+
+    sessionId: {
+      type: String,
+    },
+
+    shiprocketOrderId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+    },
+
     orderNumber: {
       type: String,
       required: true,
       unique: true,
-      uppercase: true,
-      trim: true,
       index: true,
     },
-    userId: {
+
+    items: [orderItemSchema],
+
+    shippingAddress: shippingAddressSchema,
+
+    paymentType: {
       type: String,
-      required: false,
-      index: true,
-    },
-    sessionId: {
-      type: String,
-      required: false,
-      index: true,
-    },
-    isGuestOrder: {
-      type: Boolean,
-      default: false,
-    },
-    items: {
-      type: [orderItemSchema],
-      required: true,
-      validate: {
-        validator: (v: any[]) => v && v.length > 0,
-        message: 'Order must have at least one item',
-      },
-    },
-    subtotal: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    discountAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    shippingAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    gstAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    totalAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    appliedCoupon: {
-      code: {
-        type: String,
-        trim: true,
-      },
-      discountId: {
-        type: String,
-      },
-      discountAmount: {
-        type: Number,
-        min: 0,
-      },
-    },
-    appliedVoucher: {
-      code: {
-        type: String,
-        trim: true,
-      },
-      discountId: {
-        type: String,
-      },
-      discountAmount: {
-        type: Number,
-        min: 0,
-      },
-    },
-    shippingAddress: {
-      type: addressSchema,
+      enum: ['CASH_ON_DELIVERY', 'PREPAID', 'UPI', 'CARD', 'WALLET'],
       required: true,
     },
-    billingAddress: {
-      type: addressSchema,
-      required: true,
-    },
-    paymentId: {
-      type: String,
-      index: true,
-    },
-    shipmentId: {
-      type: String,
-      index: true,
-    },
-    status: {
-      type: String,
-      enum: [
-        'created',
-        'payment_pending',
-        'payment_processing',
-        'payment_failed',
-        'confirmed',
-        'processing',
-        'shipped',
-        'delivered',
-        'cancelled',
-        'refund_initiated',
-        'refunded',
-        'failed',
-      ],
-      default: 'created',
-      index: true,
-    },
+
     paymentStatus: {
       type: String,
-      enum: ['pending', 'processing', 'completed', 'failed', 'refunded'],
-      default: 'pending',
+      enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
+      default: 'PENDING',
     },
-    shipmentStatus: {
+
+    orderStatus: {
       type: String,
       enum: [
-        'not_created',
-        'pending',
-        'pickup_scheduled',
-        'in_transit',
-        'out_for_delivery',
-        'delivered',
-        'rto_initiated',
-        'rto_in_transit',
-        'rto_delivered',
-        'cancelled',
-        'failed',
+        'PENDING',
+        'CONFIRMED',
+        'PROCESSING',
+        'SHIPPED',
+        'OUT_FOR_DELIVERY',
+        'DELIVERED',
+        'CANCELLED',
+        'RETURNED',
       ],
-      default: 'not_created',
+      default: 'PENDING',
     },
+
+    pricing: {
+      subtotal: {
+        type: Number,
+        required: true,
+      },
+      discount: {
+        type: Number,
+        default: 0,
+      },
+      shippingCharges: {
+        type: Number,
+        default: 0,
+      },
+      tax: {
+        type: Number,
+        default: 0,
+      },
+      total: {
+        type: Number,
+        required: true,
+      },
+    },
+
+    appliedCoupon: {
+      code: String,
+      discountAmount: Number,
+    },
+
+    appliedVoucher: {
+      code: String,
+      discountAmount: Number,
+    },
+
+    trackingNumber: {
+      type: String,
+    },
+
+    shiprocketShipmentId: {
+      type: String,
+    },
+
     notes: {
       type: String,
-      trim: true,
-      maxLength: 500,
     },
-    customerNotes: {
+
+    cancellationReason: {
       type: String,
-      trim: true,
-      maxLength: 500,
     },
-    source: {
-      type: String,
-      enum: ['web', 'mobile', 'admin'],
-      default: 'web',
-    },
+
     cancelledAt: {
       type: Date,
     },
-    cancelledBy: {
-      type: String,
-    },
-    cancellationReason: {
-      type: String,
-      trim: true,
-      maxLength: 500,
+
+    deliveredAt: {
+      type: Date,
     },
   },
   { timestamps: true }
 );
 
-orderSchema.index({ userId: 1, status: 1 });
-orderSchema.index({ sessionId: 1, status: 1 });
-orderSchema.index({ createdAt: -1 });
-orderSchema.index({ orderNumber: 1, userId: 1 });
+orderSchema.index({ userId: 1, createdAt: -1 });
+orderSchema.index({ orderStatus: 1, createdAt: -1 });
+orderSchema.index({ shiprocketOrderId: 1 });
 
-export interface IOrderItem {
-  productId: string;
-  productCode: string;
-  name: string;
-  price: number;
-  quantity: number;
-  size: string;
-  color: {
-    colorName: string;
-    colorHex: string;
-  };
-  selectedImage: string;
-  hsn?: string;
-  gstRate: number;
-}
-
-export interface IOrderAddress {
-  name: string;
-  phone: string;
-  email?: string;
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  state: string;
-  pincode: string;
-  country: string;
-}
-
-export interface IAppliedDiscount {
-  code: string;
-  discountId: string;
-  discountAmount: number;
-}
-
-export interface IOrder extends Document {
+export interface IOrder {
   _id: string;
-  orderNumber: string;
-  userId?: string;
+  userId?: mongoose.Types.ObjectId;
   sessionId?: string;
-  isGuestOrder: boolean;
-  items: IOrderItem[];
-  subtotal: number;
-  discountAmount: number;
-  shippingAmount: number;
-  gstAmount: number;
-  totalAmount: number;
-  appliedCoupon?: IAppliedDiscount;
-  appliedVoucher?: IAppliedDiscount;
-  shippingAddress: IOrderAddress;
-  billingAddress: IOrderAddress;
-  paymentId?: string;
-  shipmentId?: string;
-  status: string;
+  shiprocketOrderId: string;
+  orderNumber: string;
+  items: Array<{
+    variantId: mongoose.Types.ObjectId;
+    shiprocketVariantId?: string;
+    productName: string;
+    sku: string;
+    attributes: {
+      size?: string;
+      colorName?: string;
+      colorHex?: string;
+    };
+    image?: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+  }>;
+  shippingAddress: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
+    country?: string;
+  };
+  paymentType: string;
   paymentStatus: string;
-  shipmentStatus: string;
+  orderStatus: string;
+  pricing: {
+    subtotal: number;
+    discount: number;
+    shippingCharges: number;
+    tax: number;
+    total: number;
+  };
+  appliedCoupon?: {
+    code: string;
+    discountAmount: number;
+  };
+  appliedVoucher?: {
+    code: string;
+    discountAmount: number;
+  };
+  trackingNumber?: string;
+  shiprocketShipmentId?: string;
   notes?: string;
-  customerNotes?: string;
-  source: string;
-  cancelledAt?: Date;
-  cancelledBy?: string;
   cancellationReason?: string;
+  cancelledAt?: Date;
+  deliveredAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -13,6 +13,15 @@ import { globalHandler } from './middlewares/error-handler.middleware';
 import rootRouter from './routes/v1.route';
 
 const app = express();
+app.use(
+  '/api/v1/webhooks',
+  express.json({
+    limit: '8mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf.toString('utf8');
+    },
+  })
+);
 app.set('trust proxy', true); // very important for rate-limiter to trust the x-forwarded-for headers
 app.set('view engine', 'ejs');
 app.set('views', 'src/views');

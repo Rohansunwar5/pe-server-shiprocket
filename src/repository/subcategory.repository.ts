@@ -1,131 +1,116 @@
-import categoryModel from "../models/category.model";
-import subcategoryModel from "../models/subcategory.model";
+import subcategoryModel, { ISubcategory } from '../models/subcategory.model';
+import mongoose from 'mongoose';
 
 export interface ICreateSubcategoryParams {
-    name: string;
-    category: string;
-    description?: string;
-    image?: string;
-    isActive?: boolean;
+  name: string;
+  categoryId: string;
+  description?: string;
+  image?: string;
+  shiprocketCollectionId?: string;
+  hsn?: string;
+  isActive?: boolean;
 }
 
-export interface IUpdateSubCategoryParams {
-    name?: string;
-    category?: string;
-    description?: string;
-    image?: string;
-    isactive?: boolean;
-}
-
-export interface IGetSubcategoriesParams { 
-    page?: number;
-    limit?: number;
-    isActive?: boolean;
-    searchTerm?: string;
+export interface IUpdateSubcategoryParams {
+  _id: string;
+  name?: string;
+  categoryId?: string;
+  description?: string;
+  image?: string;
+  shiprocketCollectionId?: string;
+  hsn?: string;
+  isActive?: boolean;
 }
 
 export class SubcategoryRepository {
-    private _model = subcategoryModel;
+  private _model = subcategoryModel;
 
-    async createSubcategory(params: ICreateSubcategoryParams) {
-        return this._model.create(params);
+  async createSubcategory(params: ICreateSubcategoryParams): Promise<ISubcategory> {
+    return this._model.create({
+      name: params.name,
+      categoryId: new mongoose.Types.ObjectId(params.categoryId),
+      description: params.description || '',
+      image: params.image || '',
+      shiprocketCollectionId: params.shiprocketCollectionId,
+      hsn: params.hsn || '',
+      isActive: params.isActive !== undefined ? params.isActive : true,
+    });
+  }
+
+  async getSubcategoryById(id: string): Promise<ISubcategory | null> {
+    return this._model.findById(id).populate('categoryId');
+  }
+
+  async getSubcategoriesByCategoryId(categoryId: string, page = 1, limit = 100) {
+    const skip = (page - 1) * limit;
+
+    const subcategories = await this._model.find({
+      categoryId: new mongoose.Types.ObjectId(categoryId),
+    })
+      .populate('categoryId')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    const total = await this._model.countDocuments({
+      categoryId: new mongoose.Types.ObjectId(categoryId),
+    });
+
+    return {
+      subcategories,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getAllSubcategories(page = 1, limit = 100, isActive?: boolean) {
+    const skip = (page - 1) * limit;
+    const filter: any = {};
+
+    if (isActive !== undefined) {
+      filter.isActive = isActive;
     }
 
-    async getSubcategoryById(id: string) {
-        return this._model.findById(id);
-    }
+    const subcategories = await this._model.find(filter)
+      .populate('categoryId')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
-    async getSubcategoryByName(name: string, categoryId: string) {
-        return this._model.findOne({ name: name.trim(), category: categoryId, isActive: true });
-    }
+    const total = await this._model.countDocuments(filter);
 
-    async getSubcategoriesByCategory(categoryId: string) {
-        return this._model.find({ category: categoryId, isActive: true }).sort({ name: 1 });
-    }
+    return {
+      subcategories,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 
-    async getAllSubcategories() {
-        return this._model.find({ isActive: true }).sort({ name: 1 });
-    }
+  async updateSubcategory(params: IUpdateSubcategoryParams): Promise<ISubcategory | null> {
+    const { _id, ...updateData } = params;
 
-    async getSubcategoriesWithPagination(params: IGetSubcategoriesParams) {
-        const { page = 1, limit = 10, isActive, searchTerm } = params;
-        const skip = (page - 1) * limit;
+    const updateObject: any = {};
 
-        const filter: any = {};
-        if(typeof isActive === 'boolean') {
-            filter.isActive = isActive;
-        }
+    if (updateData.name) updateObject.name = updateData.name;
+    if (updateData.categoryId) updateObject.categoryId = new mongoose.Types.ObjectId(updateData.categoryId);
+    if (updateData.description !== undefined) updateObject.description = updateData.description;
+    if (updateData.image !== undefined) updateObject.image = updateData.image;
+    if (updateData.shiprocketCollectionId !== undefined) updateObject.shiprocketCollectionId = updateData.shiprocketCollectionId;
+    if (updateData.hsn !== undefined) updateObject.hsn = updateData.hsn;
+    if (updateData.isActive !== undefined) updateObject.isActive = updateData.isActive;
 
-        if(searchTerm) {
-            filter.$text = { $search: searchTerm }
-        }
+    return this._model.findByIdAndUpdate(_id, updateObject, { new: true }).populate('categoryId');
+  }
 
-        const [subcategories, total] = await Promise.all([
-            this._model
-                .find(filter)
-                .sort(searchTerm ? { score: { $meta: 'textScore' }} : { name: 1 })
-                .skip(skip)
-                .limit(limit)
-                .lean(),
-            this._model.countDocuments(filter)
-        ]);
-
-        if (subcategories.length === 0) {
-            return {
-                subcategories: [],
-                total,
-                totalPages: Math.ceil(total / limit),
-                currentPage: page
-            };
-        }
-
-        const categoryIds = [...new Set(subcategories.map(sc => sc.category.toString()))];
-        const categories = await this.fetchCategoriesByIds(categoryIds);
-
-        const categoryMap = new Map();
-        categories.forEach(cat => {
-            categoryMap.set(cat._id.toString(), cat);
-        });
-
-        const subcategoriesWithCategories = subcategories.map(sc => ({
-            ...sc,
-            category: categoryMap.get(sc.category.toString()) || null
-        }));
-
-        return {
-            subcategories: subcategoriesWithCategories,
-            total,
-            totalPages: Math.ceil(total / limit),
-            currentPage: page
-        };
-    }
-
-    private async fetchCategoriesByIds(categoryIds: string[]) {
-        return categoryModel
-            .find({ 
-                _id: { $in: categoryIds },
-                isActive: true 
-            })
-            .select('_id name description image isActive')
-            .lean();
-    }
-
-    async updateSubcategory(id: string, params: IUpdateSubCategoryParams) {
-        return this._model.findByIdAndUpdate(
-            id, 
-            params,
-            { new: true, runValidators: true }
-        )
-    }
-
-    async deleteSubcategory(id: string) {
-        return this._model.findByIdAndDelete(id);
-    }
-
-    async searchSubcategories(searchTerm : string) {
-        return this._model.find({
-            $text: { $search: searchTerm },
-            isActive: true
-        }).sort({ score: { $meta: 'textScore' }})
-    }
+  async deleteSubcategory(id: string): Promise<ISubcategory | null> {
+    return this._model.findByIdAndUpdate(id, { isActive: false }, { new: true });
+  }
 }

@@ -1,4 +1,4 @@
-import mongoose from 'mongoose'; 
+import mongoose from 'mongoose';
 
 const categorySchema = new mongoose.Schema(
   {
@@ -7,20 +7,31 @@ const categorySchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
-      maxLength: 50,
+      maxLength: 100,
     },
+    
     description: {
       type: String,
       trim: true,
-      maxLength: 500,
+      maxLength: 1000,
     },
+    
     image: {
       type: String,
-    },
-    hsn: {
-      type: String,      // HSN Code (optional)
       trim: true,
     },
+    
+    // Shiprocket Collection ID - stored after syncing with Shiprocket
+    shiprocketCollectionId: {
+      type: String,
+      index: true,
+    },
+    
+    hsn: {
+      type: String,
+      trim: true,
+    },
+    
     isActive: {
       type: Boolean,
       default: true,
@@ -29,15 +40,20 @@ const categorySchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Indexes for search and filtering
 categorySchema.index({ name: 'text', description: 'text' });
+categorySchema.index({ isActive: 1 });
 
-export interface ICategory extends mongoose.Document {
+export interface ICategory {
   _id: string;
   name: string;
   description?: string;
   image?: string;
-  hsn?: string;      // <-- Add here
+  shiprocketCollectionId?: string;
+  hsn?: string;
   isActive: boolean;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-export default mongoose.model<ICategory>('Category', categorySchema);
+export default mongoose.model<ICategory & mongoose.Document>('Category', categorySchema);

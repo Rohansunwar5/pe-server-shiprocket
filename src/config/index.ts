@@ -32,6 +32,8 @@ const config = {
   SHIPROCKET_PICKUP_LOCATION: process.env.SHIPROCKET_PICKUP_LOCATION! as string,
   SHIPROCKET_PICKUP_PINCODE: process.env.SHIPROCKET_PICKUP_PINCODE! as string,
   SHIPROCKET_WEBHOOK_SECRET: process.env.SHIPROCKET_WEBHOOK_SECRET! as string,
+  SHIPROCKET_API_KEY: process.env.SHIPROCKET_API_KEY! as string,
+  SHIPROCKET_SECRET_KEY: process.env.SHIPROCKET_SECRET_KEY! as string,
 
 
   SERVER_NAME: `${process.env.SERVER_NAME}-${process.env.NODE_ENV}`! as string,

@@ -1,185 +1,127 @@
-import { BadRequestError } from "../errors/bad-request.error";
-import { InternalServerError } from "../errors/internal-server.error";
-import { NotFoundError } from "../errors/not-found.error";
-
-import productRepository, {
-    CreateProductParams,
-    UpdateProductParams,
-    ListProductsParams,
-} from "../repository/product.repository";
-import { uploadProductImageToS3 } from "../utils/s3.util";
+// product.service.ts
+import { BadRequestError } from '../errors/bad-request.error';
+import { NotFoundError } from '../errors/not-found.error';
+import { InternalServerError } from '../errors/internal-server.error';
+import {
+  ProductRepository,
+  ICreateProductParams,
+  IUpdateProductParams,
+  IGetProductsParams,
+} from '../repository/product.repository';
+import { ProductVariantRepository } from '../repository/productVariant.repository';
+import shiprocketWebhookService from './shiprocketWebhook.service';
 
 class ProductService {
-    constructor(private readonly _productRepository = productRepository) {}
+  constructor(
+    private readonly _productRepository: ProductRepository,
+    private readonly _variantRepository: ProductVariantRepository
+  ) {}
 
-    async createProduct(params: CreateProductParams) {
-        const existing = await this._productRepository.getProductByCode(params.productCode);
-        if (existing) throw new BadRequestError("Product with this code already exists");
-
-        if (!params.images || params.images.length === 0) {
-            throw new BadRequestError("At least one product image is required");
-        }
-
-        if (!params.colors || params.colors.length === 0) {
-            throw new BadRequestError("At least one color must be provided");
-        }
-
-        for (const color of params.colors) {
-            if (!color.images || color.images.length === 0) {
-                throw new BadRequestError(`Color '${color.colorName}' must include at least one image`);
-            }
-
-            if (!color.sizeStock || color.sizeStock.length === 0) {
-                throw new BadRequestError(`Color '${color.colorName}' must include sizeStock data`);
-            }
-        }
-
-        const created = await this._productRepository.createProduct(params);
-        if (!created) throw new InternalServerError("Failed to create product");
-
-        return created;
+  async createProduct(params: ICreateProductParams) {
+    const existingProduct = await this._productRepository.getProductByCode(params.productCode);
+    if (existingProduct) {
+      throw new BadRequestError('Product code already exists');
     }
 
-    async updateProduct(productId: string, params: UpdateProductParams) {
-        const existing = await this._productRepository.getProductById(productId);
-        if (!existing) throw new NotFoundError("Product not found");
-
-        if (params.productCode && params.productCode !== existing.productCode) {
-            const duplicate = await this._productRepository.getProductByCode(params.productCode);
-            if (duplicate) throw new BadRequestError("Product with this code already exists");
-        }
-
-        if (params.images && params.images.length === 0) {
-            throw new BadRequestError("Product must have at least one image");
-        }
-
-        if (params.colors) {
-            for (const color of params.colors) {
-                if (!color.colorName) {
-                    throw new BadRequestError("Color name is required for each color");
-                }
-
-                if (color.images && color.images.length === 0) {
-                    throw new BadRequestError(`Color '${color.colorName}' must include at least one image`);
-                }
-
-                if (color.sizeStock && color.sizeStock.length === 0) {
-                    throw new BadRequestError(`Color '${color.colorName}' must include sizeStock`);
-                }
-            }
-        }
-
-        Object.keys(params).forEach(key => {
-            if (params[key as keyof UpdateProductParams] === undefined) {
-                delete params[key as keyof UpdateProductParams];
-            }
-        });
-
-        const updated = await this._productRepository.updateProduct(productId, params);
-        if (!updated) throw new InternalServerError("Failed to update product");
-
-        return updated;
+    const existingSlug = await this._productRepository.getProductBySlug(params.slug);
+    if (existingSlug) {
+      throw new BadRequestError('Slug already exists');
     }
 
-    async deleteProduct(productId: string) {
-        const deleted = await this._productRepository.deleteProduct(productId);
-        if (!deleted) throw new NotFoundError("Product not found or deletion failed");
-
-        return true;
+    const product = await this._productRepository.createProduct(params);
+    if (!product) {
+      throw new InternalServerError('Failed to create product');
     }
 
-    async getProductById(id: string) {
-        const product = await this._productRepository.getProductById(id);
-        if (!product) throw new NotFoundError("Product not found");
+    return product;
+  }
 
-        return product;
+  async getProductById(id: string) {
+    const product = await this._productRepository.getProductById(id);
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+    return product;
+  }
+
+  async getProductBySlug(slug: string) {
+    const product = await this._productRepository.getProductBySlug(slug);
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+    return product;
+  }
+
+  async getProducts(params: IGetProductsParams) {
+    return this._productRepository.getProducts(params);
+  }
+
+  async updateProduct(params: IUpdateProductParams) {
+    const product = await this._productRepository.updateProduct(params);
+    if (!product) {
+      throw new NotFoundError('Product not found');
     }
 
-    async getProductByCode(code: string) {
-        const product = await this._productRepository.getProductByCode(code);
-        if (!product) throw new NotFoundError("Product not found");
-        return product;
+    try {
+      await shiprocketWebhookService.sendProductUpdateWebhook(product._id.toString());
+    } catch (error) {
+      console.error('Failed to send webhook to Shiprocket:', error);
     }
 
-    async listProducts(params: ListProductsParams) {
-        return this._productRepository.listProducts(params);
+    return product;
+  }
+
+  async deleteProduct(id: string) {
+    const product = await this._productRepository.deleteProduct(id);
+    if (!product) {
+      throw new NotFoundError('Product not found');
+    }
+    return { message: 'Product deleted successfully' };
+  }
+
+  async getProductWithVariants(productId: string) {
+    const product = await this._productRepository.getProductById(productId);
+    if (!product) {
+      throw new NotFoundError('Product not found');
     }
 
-    async searchProducts(query: string, page = 1, limit = 20) {
-        if (!query) throw new BadRequestError("Search query cannot be empty");
-        return this._productRepository.searchProducts(query, page, limit);
+    const { variants } = await this._variantRepository.getVariantsByProductId(productId, 1, 1000);
+
+    return {
+      product,
+      variants,
+    };
+  }
+
+  async getProductsByCategory(categoryId: string, page = 1, limit = 100) {
+    return this._productRepository.getProductsByCategory(categoryId, page, limit);
+  }
+
+  // Helper method to sync product metrics when variants change
+  async syncProductMetrics(productId: string) {
+    const { variants } = await this._variantRepository.getVariantsByProductId(productId, 1, 1000);
+    const activeVariants = variants.filter(v => v.isActive);
+
+    if (activeVariants.length === 0) {
+      await this._productRepository.syncProductMetrics(productId, {
+        totalStock: 0,
+        basePrice: 0,
+      });
+      return;
     }
 
-    async getProductsByCategory(category: string, page = 1, limit = 20) {
-        return this._productRepository.getProductsByCategory(category, page, limit);
-    }
+    const prices = activeVariants.map(v => v.price);
+    const totalStock = activeVariants.reduce((sum, v) => sum + v.stock, 0);
 
-    async getProductsBySubcategory(subcategory: string, page = 1, limit = 20) {
-        return this._productRepository.getProductsBySubcategory(subcategory, page, limit);
-    }
-
-    async updateProductStock(productId: string, colorName: string, size: string, stock: number) {
-        if (stock < 0) throw new BadRequestError("Stock cannot be negative");
-
-        const updated = await this._productRepository.updateProductStock(productId, colorName, size, stock);
-        if (!updated) throw new BadRequestError("Failed to update product stock");
-
-        return true;
-    }
-
-    async reduceProductStock(productId: string, colorName: string, size: string, qty: number) {
-        if (qty <= 0) throw new BadRequestError("Invalid quantity");
-
-        const updated = await this._productRepository.reduceProductStock(productId, colorName, size, qty);
-        if (!updated) throw new BadRequestError("Not enough stock to reduce");
-
-        return true;
-    }
-
-    async getAvailableSize(productId: string) {
-        return this._productRepository.getAvailableSize(productId);
-    }
-
-    async getProductStock(productId: string, colorName: string, size: string) {
-        const stock = await this._productRepository.getProductStock(productId, colorName, size);
-        if (!stock) throw new NotFoundError("Stock not found");
-        return stock;
-    }
-
-    async addSubcategory(productId: string, sub: string) {
-        const ok = await this._productRepository.addSubcategory(productId, sub);
-        if (!ok) throw new BadRequestError("Failed to add subcategory");
-        return true;
-    }
-
-    async removeSubcategory(productId: string, sub: string) {
-        const ok = await this._productRepository.removeSubcategory(productId, sub);
-        if (!ok) throw new BadRequestError("Failed to remove subcategory");
-        return true;
-    }
-
-    async getAllProductsLight(params: { page: number; limit: number }) {
-        return this._productRepository.getAllProductsLight(params);
-    }
-
-    async handleImageUploads(params: { files?: Express.Multer.File[]; existingImages?: string[] }): Promise<string[]> {
-        let imageUrls: string[] = [];
-
-        if (params.existingImages) {
-            imageUrls = Array.isArray(params.existingImages) ? params.existingImages : [params.existingImages];
-        }
-
-        if (params.files && params.files.length > 0) {
-            const uploadPromises = params.files.map((file) => uploadProductImageToS3(file));
-            const newImageUrls = await Promise.all(uploadPromises);
-            imageUrls = [...imageUrls, ...newImageUrls.map(img => img.url)];
-        }
-
-        if (imageUrls.length === 0) throw new BadRequestError('At least one product image is required');
-
-        return imageUrls;
-    }
-
+    await this._productRepository.syncProductMetrics(productId, {
+      totalStock,
+      basePrice: Math.min(...prices),
+      priceRange: {
+        min: Math.min(...prices),
+        max: Math.max(...prices),
+      },
+    });
+  }
 }
 
-export default new ProductService();
+export default new ProductService(new ProductRepository(), new ProductVariantRepository());

@@ -1,37 +1,54 @@
-import orderModel, { IOrder, IOrderItem, IOrderAddress } from '../models/order.model';
+import orderModel, { IOrder } from '../models/order.model';
+import mongoose from 'mongoose';
 
 export interface ICreateOrderParams {
-  orderNumber: string;
   userId?: string;
   sessionId?: string;
-  isGuestOrder: boolean;
-  items: IOrderItem[];
-  subtotal: number;
-  discountAmount: number;
-  shippingAmount: number;
-  gstAmount: number;
-  totalAmount: number;
+  shiprocketOrderId: string;
+  orderNumber: string;
+  items: Array<{
+    variantId: mongoose.Types.ObjectId;
+    shiprocketVariantId?: string;
+    productName: string;
+    sku: string;
+    attributes: {
+      size?: string;
+      colorName?: string;
+      colorHex?: string;
+    };
+    image?: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+  }>;
+  shippingAddress: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    addressLine1?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    pinCode?: string;
+    country?: string;
+  };
+  paymentType: string;
+  paymentStatus: string;
+  pricing: {
+    subtotal: number;
+    discount: number;
+    shippingCharges: number;
+    tax: number;
+    total: number;
+  };
   appliedCoupon?: {
     code: string;
-    discountId: string;
     discountAmount: number;
   };
   appliedVoucher?: {
     code: string;
-    discountId: string;
     discountAmount: number;
   };
-  shippingAddress: IOrderAddress;
-  billingAddress: IOrderAddress;
-  customerNotes?: string;
-  source?: string;
-}
-
-export interface IUpdateOrderStatusParams {
-  orderId: string;
-  status: string;
-  paymentStatus?: string;
-  shipmentStatus?: string;
 }
 
 export class OrderRepository {
@@ -45,101 +62,129 @@ export class OrderRepository {
     return this._model.findById(orderId);
   }
 
+  async getOrderByShiprocketId(
+    shiprocketOrderId: string
+  ): Promise<IOrder | null> {
+    return this._model.findOne({ shiprocketOrderId });
+  }
+
   async getOrderByOrderNumber(orderNumber: string): Promise<IOrder | null> {
     return this._model.findOne({ orderNumber });
   }
 
-  async getOrdersByUserId(userId: string, limit?: number): Promise<IOrder[]> {
-    const query = this._model.find({ userId }).sort({ createdAt: -1 });
-    if (limit) {
-      query.limit(limit);
-    }
-    return query;
+  async getOrdersByUserId(userId: string): Promise<IOrder[]> {
+    return this._model.find({ userId }).sort({ createdAt: -1 });
   }
 
-  async getOrdersBySessionId(sessionId: string, limit?: number): Promise<IOrder[]> {
-    const query = this._model.find({ sessionId }).sort({ createdAt: -1 });
-    if (limit) {
-      query.limit(limit);
-    }
-    return query;
-  }
+  async updateOrderStatus(params: {
+    orderId: string;
+    orderStatus: string;
+  }): Promise<IOrder | null> {
+    const { orderId, orderStatus } = params;
 
-  async updateOrderStatus(params: IUpdateOrderStatusParams): Promise<IOrder | null> {
-    const { orderId, status, paymentStatus, shipmentStatus } = params;
-    const updateData: any = { status };
-    
-    if (paymentStatus) {
-      updateData.paymentStatus = paymentStatus;
-    }
-    if (shipmentStatus) {
-      updateData.shipmentStatus = shipmentStatus;
+    const updateData: any = { orderStatus };
+
+    if (orderStatus === 'DELIVERED') {
+      updateData.deliveredAt = new Date();
     }
 
     return this._model.findByIdAndUpdate(orderId, updateData, { new: true });
   }
 
-  async updateOrderPaymentId(orderId: string, paymentId: string): Promise<IOrder | null> {
+  async updatePaymentStatus(params: {
+    orderId: string;
+    paymentStatus: string;
+  }): Promise<IOrder | null> {
+    const { orderId, paymentStatus } = params;
+
     return this._model.findByIdAndUpdate(
       orderId,
-      { paymentId },
+      { paymentStatus },
       { new: true }
     );
   }
 
-  async updateOrderShipmentId(orderId: string, shipmentId: string): Promise<IOrder | null> {
-    return this._model.findByIdAndUpdate(
-      orderId,
-      { shipmentId },
-      { new: true }
-    );
-  }
+  async updateTrackingInfo(params: {
+    orderId: string;
+    trackingNumber: string;
+    shiprocketShipmentId?: string;
+  }): Promise<IOrder | null> {
+    const { orderId, trackingNumber, shiprocketShipmentId } = params;
 
-  async cancelOrder(
-    orderId: string,
-    cancelledBy: string,
-    cancellationReason?: string
-  ): Promise<IOrder | null> {
     return this._model.findByIdAndUpdate(
       orderId,
       {
-        status: 'cancelled',
-        cancelledAt: new Date(),
-        cancelledBy,
-        cancellationReason,
+        trackingNumber,
+        ...(shiprocketShipmentId && { shiprocketShipmentId }),
       },
       { new: true }
     );
   }
 
-  async updateOrder(orderId: string, updateData: Partial<IOrder>): Promise<IOrder | null> {
-    return this._model.findByIdAndUpdate(orderId, updateData, { new: true });
+  async cancelOrder(params: {
+    orderId: string;
+    cancellationReason: string;
+  }): Promise<IOrder | null> {
+    const { orderId, cancellationReason } = params;
+
+    return this._model.findByIdAndUpdate(
+      orderId,
+      {
+        orderStatus: 'CANCELLED',
+        cancellationReason,
+        cancelledAt: new Date(),
+      },
+      { new: true }
+    );
   }
 
-  async getOrdersByStatus(
-    status: string,
-    limit?: number,
-    skip?: number
-  ): Promise<IOrder[]> {
-    const query = this._model.find({ status }).sort({ createdAt: -1 });
-    
-    if (skip) {
-      query.skip(skip);
+  async addOrderNotes(params: {
+    orderId: string;
+    notes: string;
+  }): Promise<IOrder | null> {
+    const { orderId, notes } = params;
+
+    return this._model.findByIdAndUpdate(orderId, { notes }, { new: true });
+  }
+
+  async getOrdersWithFilters(params: {
+    userId?: string;
+    orderStatus?: string;
+    paymentStatus?: string;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    limit?: number;
+  }): Promise<{ orders: IOrder[]; total: number }> {
+    const {
+      userId,
+      orderStatus,
+      paymentStatus,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = params;
+
+    const query: any = {};
+
+    if (userId) query.userId = userId;
+    if (orderStatus) query.orderStatus = orderStatus;
+    if (paymentStatus) query.paymentStatus = paymentStatus;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = startDate;
+      if (endDate) query.createdAt.$lte = endDate;
     }
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    return query;
-  }
 
-  async getOrdersCount(filters: any): Promise<number> {
-    return this._model.countDocuments(filters);
-  }
+    const skip = (page - 1) * limit;
 
-  async getRecentOrders(limit: number = 10): Promise<IOrder[]> {
-    return this._model.find().sort({ createdAt: -1 }).limit(limit);
+    const [orders, total] = await Promise.all([
+      this._model.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      this._model.countDocuments(query),
+    ]);
+
+    return { orders, total };
   }
 }
-
-export default new OrderRepository();

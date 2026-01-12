@@ -1,25 +1,45 @@
 import { Router } from 'express';
 import { asyncHandler } from '../utils/asynchandler';
 import {
-  createOrder,
-  initiatePayment,
   getOrderById,
-  getOrderByOrderNumber,
-  getMyOrders,
-  getGuestOrders,
-  cancelOrder,
+  getUserOrders,
   updateOrderStatus,
+  updateTrackingInfo,
+  cancelOrder,
 } from '../controllers/order.controller';
 import isLoggedIn from '../middlewares/isLoggedIn.middleware';
+import { cancelOrderValidator, updateOrderStatusValidator } from '../middlewares/validators/order.validator';
+
 
 const orderRouter = Router();
-orderRouter.post('/',  asyncHandler(createOrder));
-orderRouter.post('/:orderId/payment', asyncHandler(initiatePayment));
-orderRouter.get('/:orderId', asyncHandler(getOrderById));
-orderRouter.get('/number/:orderNumber', asyncHandler(getOrderByOrderNumber));
-orderRouter.get('/user/my-orders', isLoggedIn, asyncHandler(getMyOrders));
-orderRouter.get('/guest/:sessionId', asyncHandler(getGuestOrders));
-orderRouter.post('/:orderId/cancel', asyncHandler(cancelOrder));
-orderRouter.patch('/:orderId/status', asyncHandler(updateOrderStatus));
+
+// Get all orders for logged-in user
+orderRouter.get('/', isLoggedIn, asyncHandler(getUserOrders));
+
+// Get specific order by ID
+orderRouter.get('/:orderId', isLoggedIn, asyncHandler(getOrderById));
+
+// Update order status (admin/internal use)
+orderRouter.patch(
+  '/:orderId/status',
+  isLoggedIn,
+  updateOrderStatusValidator,
+  asyncHandler(updateOrderStatus)
+);
+
+// Update tracking information (admin/internal use)
+orderRouter.patch(
+  '/:orderId/tracking',
+  isLoggedIn,
+  asyncHandler(updateTrackingInfo)
+);
+
+// Cancel order
+orderRouter.post(
+  '/:orderId/cancel',
+  isLoggedIn,
+  cancelOrderValidator,
+  asyncHandler(cancelOrder)
+);
 
 export default orderRouter;

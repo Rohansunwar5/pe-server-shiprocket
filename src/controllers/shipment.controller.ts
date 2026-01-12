@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import shipmentService from '../services/shipment.service';
+import shiprocketCheckoutService from '../services/shiprocketCheckout.service';
 
 export const createShipment = async (req: Request, res: Response, next: NextFunction) => {
   const { orderId } = req.params;
@@ -48,4 +49,16 @@ export const getShipmentByOrderId = async (req: Request, res: Response, next: Ne
   const shipment = await shipmentService.getShipmentByOrderId(orderId);
 
   next({ success: true, data: shipment });
+};
+
+export const generateCheckoutToken = async (req:Request, res:Response, next:NextFunction) => {
+  const userId = req.user?._id;
+  const sessionId = req.headers['x-session-id'] as string;
+
+  const token = await shiprocketCheckoutService.generateToken({
+    userId,
+    sessionId,
+  });
+
+  res.json({ token });
 };
