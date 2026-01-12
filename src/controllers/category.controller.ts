@@ -2,12 +2,13 @@ import { NextFunction, Request, Response } from 'express';
 import categoryService from '../services/category.service';
 
 export const createCategory = async (req: Request, res: Response, next: NextFunction) => {
-  const { name, description, image, shiprocketCollectionId, hsn, isActive } = req.body;
+  const { name, description, image, handle, shiprocketCollectionId, hsn, isActive } = req.body;
   
   const response = await categoryService.createCategory({
     name,
     description,
     image,
+    handle,
     shiprocketCollectionId,
     hsn,
     isActive,

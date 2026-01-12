@@ -83,15 +83,8 @@ class SubcategoryService {
 
   private async syncWithShiprocket(subcategoryId: string) {
     try {
-      const subcategory = await this._subcategoryRepository.getSubcategoryById(subcategoryId);
-      if (subcategory) {
-        await shiprocketWebhookService.sendCollectionUpdateWebhook(subcategoryId, {
-          title: subcategory.name,
-          body_html: subcategory.description || '',
-          image: subcategory.image || '',
-        });
-        console.log(`Subcategory ${subcategoryId} synced with Shiprocket`);
-      }
+      await shiprocketWebhookService.sendCollectionUpdateWebhook(subcategoryId);
+      console.log(`Subcategory ${subcategoryId} synced with Shiprocket`);
     } catch (error) {
       console.error(`Failed to sync subcategory ${subcategoryId} with Shiprocket:`, error);
     }
