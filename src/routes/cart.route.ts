@@ -43,15 +43,7 @@ cartRouter.delete(
 
 // Clear entire cart
 cartRouter.delete('/clear', optionalAuth, asyncHandler(clearCart));
-
-// Get cart data formatted for Shiprocket Checkout
-cartRouter.get(
-  '/checkout-data',
-  optionalAuth,
-  asyncHandler(getCartForCheckout)
-);
-
-// Merge guest cart to user cart after login (authenticated only)
+cartRouter.get('/checkout-data', optionalAuth, asyncHandler(getCartForCheckout));
 cartRouter.post('/merge', isLoggedIn, asyncHandler(mergeGuestCart));
 
 export default cartRouter;

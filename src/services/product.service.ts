@@ -10,6 +10,7 @@ import {
 } from '../repository/product.repository';
 import { ProductVariantRepository } from '../repository/productVariant.repository';
 import shiprocketWebhookService from './shiprocketWebhook.service';
+import { uploadProductImageToS3 } from '../utils/s3.util';
 
 class ProductService {
   constructor(
@@ -97,6 +98,24 @@ class ProductService {
     return this._productRepository.getProductsByCategory(categoryId, page, limit);
   }
 
+  async handleImageUploads(params: { files?: Express.Multer.File[]; existingImages?: string[] }): Promise<string[]> {
+      let imageUrls: string[] = [];
+
+      if (params.existingImages) {
+          imageUrls = Array.isArray(params.existingImages) ? params.existingImages : [params.existingImages];
+      }
+
+      if (params.files && params.files.length > 0) {
+          const uploadPromises = params.files.map((file) => uploadProductImageToS3(file));
+          const newImageUrls = await Promise.all(uploadPromises);
+          imageUrls = [...imageUrls, ...newImageUrls.map(img => img.url)];
+      }
+
+      if (imageUrls.length === 0) throw new BadRequestError('At least one product image is required');
+
+      return imageUrls;
+  }
+
   // Helper method to sync product metrics when variants change
   async syncProductMetrics(productId: string) {
     const { variants } = await this._variantRepository.getVariantsByProductId(productId, 1, 1000);
@@ -125,3 +144,4 @@ class ProductService {
 }
 
 export default new ProductService(new ProductRepository(), new ProductVariantRepository());
+

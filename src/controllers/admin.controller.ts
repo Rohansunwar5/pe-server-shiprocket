@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import adminAuthService from "../services/adminAuth.service";
+import shiprocketSyncService from "../services/shiprocketSync.service";
 
 export const adminLogin = async (req: Request, res: Response, next: NextFunction) => {
     const { email, password } = req.body;
@@ -42,4 +43,11 @@ export const resetPassword = async (req: Request, res: Response, next: NextFunct
     const response = await adminAuthService.resetPassword( code, password );
 
     next(response);
+}
+
+export const syncProductToShiprocket  = async (req: Request, res: Response, next: NextFunction) => {
+    const { productId } = req.params;
+    await shiprocketSyncService.syncProduct(productId);
+
+    next({ message: 'Product synced with Shiprocket' });
 }

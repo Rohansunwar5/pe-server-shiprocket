@@ -125,3 +125,18 @@ export const getProductsByCategory = async (req: Request, res: Response, next: N
 
   next(response);
 };
+
+export const uploadAssets = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.file) {
+    return next({ status: 400, message: 'No file uploaded' });
+  }
+
+  const imageUrls = await productService.handleImageUploads({
+    files: [req.file],
+  });
+
+  return res.status(200).json({
+    success: true,
+    images: imageUrls,
+  });
+};
